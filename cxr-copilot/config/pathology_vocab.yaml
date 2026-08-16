@@ -1,0 +1,6 @@
+vocab_prompts:
+  - a chest x-ray showing a pneumothorax
+  - a chest x-ray showing a pleural effusion
+  - a chest x-ray showing pulmonary edema
+  - a chest x-ray showing a micro-nodule
+  - a normal chest x-ray

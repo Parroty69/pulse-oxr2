@@ -1,0 +1,16 @@
+phi_tags:
+  - PatientName
+  - PatientID
+  - PatientBirthDate
+  - PatientSex
+  - PatientAddress
+  - PatientTelephoneNumbers
+  - InstitutionName
+  - InstitutionAddress
+  - ReferringPhysicianName
+  - PerformingPhysicianName
+  - OperatorsName
+  - AccessionNumber
+  - StudyID
+  - StudyDescription
+  - SeriesDescription
