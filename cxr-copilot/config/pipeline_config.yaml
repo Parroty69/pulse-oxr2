@@ -1,0 +1,13 @@
+model:
+  device: cpu
+  tier3_backend: mock
+  medsam_checkpoint_path: medsam_vit_b.pth
+  use_mock_models: true
+pipeline:
+  score_threshold: 0.5
+  tile_size: 1024
+  tile_overlap: 0.2
+  tile_batch_size: 4
+  max_gpu_concurrency: 1
+  mask_min_area_px: 64
+  use_lite_medsam: false
