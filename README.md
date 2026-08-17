@@ -26,12 +26,16 @@ pip install -r requirements.txt
 
 ## Run UI
 ```bash
-streamlit run src/ui/app.py
+./scripts/run_ui.sh
 ```
+
+The launcher resolves the repository root automatically, so it works even when
+invoked from another directory. Additional Streamlit flags are passed through,
+for example: `./scripts/run_ui.sh --server.port 8502`.
 
 UI footer also includes the non-diagnostic disclaimer.
 
 ## Tests
 ```bash
-pytest tests/test_tiling.py tests/test_pipeline_integration.py
+pytest tests/
 ```

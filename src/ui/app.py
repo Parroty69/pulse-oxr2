@@ -3,9 +3,14 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import numpy as np
 import streamlit as st
@@ -14,7 +19,6 @@ from PIL import Image, ImageDraw
 from src.orchestration.pipeline import load_yaml, run_pipeline
 
 
-ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "config"
 FEEDBACK_LOG = Path("/tmp/cxr_copilot_feedback.log")
 
