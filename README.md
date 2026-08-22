@@ -11,20 +11,22 @@ This repository implements a research-grade, multi-agent chest X-ray co-pilot pi
 - This is a **clinical decision-support co-pilot**, not an autonomous diagnostic system.
 - Outputs are **drafts** that require licensed clinician review, editing, and sign-off.
 - Model artifacts (BiomedCLIP, MedSAM, CheXagent, MedGemma) are research artifacts and not FDA-cleared devices.
-- CheXagent-2-3b is distributed under **CC-BY-NC-4.0** (non-commercial).
+- The current CheXagent-2-3b Hugging Face model card lists an **MIT** license; verify the model card and all bundled components for your deployment.
 - MedGemma usage is governed by the **Health AI Developer Foundations** license (check current terms before deployment).
 
 ## PHI handling
 DICOM ingestion strips configured identifying tags before image tensors are processed. The app avoids logging PHI and never logs raw pixel data.
 
-## Setup
+## One-click hardware-aware deployment
+
+On macOS or Linux:
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+./deploy.sh
 ```
 
-## Run UI
+On Windows PowerShell (CUDA, Intel XPU, or CPU):
+
 ```bash
 ./scripts/run_ui.sh
 ```

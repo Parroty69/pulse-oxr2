@@ -2,4 +2,4 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-exec "${PYTHON_BIN:-python3}" "${SCRIPT_DIR}/deploy.py" --skip-install --no-launch "$@"
+exec "${PYTHON_BIN:-python3}" "${SCRIPT_DIR}/scripts/deploy.py" "$@"

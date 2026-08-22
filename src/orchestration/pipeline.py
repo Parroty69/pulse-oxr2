@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 from pathlib import Path
 from typing import Any
 
@@ -73,6 +74,35 @@ def load_yaml(path: str | Path) -> dict:
         return yaml.safe_load(f) or {}
 
 
+def deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursively apply a generated runtime overlay without discarding user config."""
+
+    merged = dict(base)
+    for key, value in overlay.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _release_accelerator_memory(device: str) -> None:
+    gc.collect()
+    try:
+        import torch
+    except Exception:  # pragma: no cover
+        return
+    try:
+        if device.startswith("cuda") and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        elif device.startswith("mps") and hasattr(torch, "mps"):
+            torch.mps.empty_cache()
+        elif device.startswith("xpu") and hasattr(torch, "xpu") and torch.xpu.is_available():
+            torch.xpu.empty_cache()
+    except (RuntimeError, AttributeError):
+        pass
+
+
 async def run_pipeline(dicom_path: str, config: dict) -> dict:
     pipeline_cfg = config.get("pipeline", {})
     model_cfg = config.get("model", {})
@@ -93,20 +123,15 @@ async def run_pipeline(dicom_path: str, config: dict) -> dict:
     use_mock = bool(model_cfg.get("use_mock_models", False))
     device = model_cfg.get("device", "cpu")
 
-    screener = BiomedCLIPScreener(device=device, use_mock=use_mock)
-    segmenter = MedSAMSegmenter(
-        checkpoint_path=model_cfg.get("medsam_checkpoint_path", "medsam_vit_b.pth"),
-        device=device,
-        use_mock=use_mock,
-    )
-    reporter = ReportGenerator(
-        backend=model_cfg.get("tier3_backend", "chexagent"),
-        device=device,
-        use_mock=use_mock,
-    )
     verifier = ActorVerifier(min_area_px=int(pipeline_cfg.get("mask_min_area_px", 64)))
+    release_between_tiers = bool(model_cfg.get("release_between_tiers", True))
 
     sem = asyncio.Semaphore(max_concurrency)
+    screener = BiomedCLIPScreener(
+        device=device,
+        dtype=model_cfg.get("screening_dtype"),
+        use_mock=use_mock,
+    )
 
     async def score_batch(batch_tiles: list[Any]) -> list[dict]:
         async with sem:
@@ -119,13 +144,36 @@ async def run_pipeline(dicom_path: str, config: dict) -> dict:
     batches = [tiles[i : i + batch_size] for i in range(0, len(tiles), batch_size)]
     scored_batches = await asyncio.gather(*(score_batch(batch) for batch in batches))
     tile_scores = [row for batch in scored_batches for row in batch]
+    if release_between_tiers:
+        del screener
+        _release_accelerator_memory(device)
 
     medsam_prompts = tier1_scores_to_medsam_boxes(tile_scores, threshold=threshold)
 
+    segmenter = MedSAMSegmenter(
+        checkpoint_path=model_cfg.get("medsam_checkpoint_path", "medsam_vit_b.pth"),
+        device=device,
+        use_mock=use_mock,
+    )
     image_rgb = to_rgb(full_image)
     masks = await asyncio.to_thread(segmenter.segment_from_boxes, image_rgb, medsam_prompts)
+    if release_between_tiers:
+        del segmenter
+        _release_accelerator_memory(device)
 
+    reporter = ReportGenerator(
+        backend=model_cfg.get("tier3_backend", "chexagent"),
+        device=device,
+        use_mock=use_mock,
+        runtime=model_cfg.get("tier3_runtime", "transformers"),
+        quantization=model_cfg.get("tier3_quantization", "none"),
+        compute_dtype=model_cfg.get("compute_dtype", "bf16"),
+        model_id=model_cfg.get("tier3_model_id"),
+    )
     report = await asyncio.to_thread(reporter.generate_report, global_thumbnail, tile_scores, masks)
+    if release_between_tiers:
+        del reporter
+        _release_accelerator_memory(device)
     verified_report = verifier.verify(report, masks)
 
     warnings = list(load_result.warnings)
