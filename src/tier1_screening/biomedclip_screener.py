@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import numpy as np
+from PIL import Image
 
 try:
     import torch
@@ -62,6 +63,32 @@ class BiomedCLIPScreener:
             return np.asarray(tile.image)
         return np.asarray(tile)
 
+    @staticmethod
+    def _to_pil_rgb(image: Any) -> Image.Image:
+        """Convert normalized pipeline tiles into OpenCLIP's expected PIL input."""
+
+        array = np.asarray(image)
+        if array.ndim == 2:
+            array = np.stack([array, array, array], axis=-1)
+        elif array.ndim == 3 and array.shape[-1] == 1:
+            array = np.repeat(array, 3, axis=-1)
+        elif array.ndim == 3 and array.shape[-1] >= 3:
+            array = array[..., :3]
+        else:
+            raise ValueError(f"Unsupported BiomedCLIP tile shape: {array.shape}")
+
+        if np.issubdtype(array.dtype, np.floating):
+            array = np.nan_to_num(array, nan=0.0, posinf=1.0, neginf=0.0)
+            if array.size and float(array.min()) >= 0.0 and float(array.max()) <= 1.0:
+                array = array * 255.0
+        elif array.dtype != np.uint8:
+            minimum = float(array.min()) if array.size else 0.0
+            maximum = float(array.max()) if array.size else 0.0
+            if maximum > minimum:
+                array = (array.astype(np.float32) - minimum) * (255.0 / (maximum - minimum))
+
+        return Image.fromarray(np.clip(array, 0, 255).astype(np.uint8)).convert("RGB")
+
     def _tile_bbox(self, tile: Any) -> list[int]:
         if isinstance(tile, dict) and "full_image_bbox" in tile:
             return list(tile["full_image_bbox"])
@@ -109,9 +136,7 @@ class BiomedCLIPScreener:
             processed = []
             for tile in tiles:
                 arr = self._prepare_image(tile)
-                if arr.ndim == 2:
-                    arr = np.stack([arr, arr, arr], axis=-1)
-                processed.append(self.preprocess(arr))
+                processed.append(self.preprocess(self._to_pil_rgb(arr)))
             image_tensor = torch.stack(processed).to(self.device, dtype=self.dtype)
             image_features = self.model.encode_image(image_tensor)
             image_features = image_features / image_features.norm(dim=-1, keepdim=True)

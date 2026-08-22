@@ -3,6 +3,11 @@ from __future__ import annotations
 import numpy as np
 
 try:
+    import torch
+except Exception:  # pragma: no cover
+    torch = None
+
+try:
     import cv2
 except Exception:  # pragma: no cover
     cv2 = None
@@ -20,7 +25,12 @@ class MedSAMSegmenter:
         self.use_mock = use_mock
         self.predictor = None
         if not use_mock and sam_model_registry is not None and SamPredictor is not None:
-            model = sam_model_registry["vit_b"](checkpoint=checkpoint_path).to(device).eval()
+            if torch is None:
+                raise RuntimeError("PyTorch is required to load MedSAM")
+            model = sam_model_registry["vit_b"]()
+            state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+            model.load_state_dict(state_dict)
+            model = model.to(device).eval()
             self.predictor = SamPredictor(model)
 
     def _rectangle_polygon(self, box: list[int]) -> list[list[int]]:
