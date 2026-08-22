@@ -3,10 +3,14 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import numpy as np
 import streamlit as st
@@ -17,7 +21,6 @@ os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 from src.orchestration.pipeline import deep_merge, load_yaml, run_pipeline
 
 
-ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "config"
 RUNTIME_CONFIG = Path(os.environ.get("CXR_PIPELINE_CONFIG", CONFIG_DIR / "runtime.generated.yaml"))
 FEEDBACK_LOG = Path("/tmp/cxr_copilot_feedback.log")
