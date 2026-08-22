@@ -14,7 +14,7 @@ albumentations
 pyarrow
 matplotlib
 requests
-segment-anything @ git+https://github.com/bowang-lab/MedSAM.git
+segment-anything @ git+https://github.com/facebookresearch/segment-anything.git@6fdee8f2727f4506cfbbe553e23b895e27956588
 opencv-python-headless
 scikit-image
 numpy
