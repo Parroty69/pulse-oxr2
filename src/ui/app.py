@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import NamedTemporaryFile
@@ -11,12 +12,22 @@ import numpy as np
 import streamlit as st
 from PIL import Image, ImageDraw
 
-from src.orchestration.pipeline import load_yaml, run_pipeline
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+
+from src.orchestration.pipeline import deep_merge, load_yaml, run_pipeline
 
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = ROOT / "config"
+RUNTIME_CONFIG = Path(os.environ.get("CXR_PIPELINE_CONFIG", CONFIG_DIR / "runtime.generated.yaml"))
 FEEDBACK_LOG = Path("/tmp/cxr_copilot_feedback.log")
+
+
+def _configured_pipeline() -> dict:
+    config = load_yaml(CONFIG_DIR / "pipeline_config.yaml")
+    if RUNTIME_CONFIG.is_file():
+        config = deep_merge(config, load_yaml(RUNTIME_CONFIG))
+    return config
 
 
 def _render_overlay(result: dict, enabled_indices: set[int]) -> Image.Image:
@@ -65,7 +76,13 @@ col_viewer, col_report = st.columns([2, 1])
 
 with st.sidebar:
     uploaded = st.file_uploader("Upload DICOM", type=["dcm"])
-    backend = st.selectbox("Reasoning model", ["chexagent", "medgemma", "mock"])
+    configured_model = _configured_pipeline().get("model", {})
+    configured_backend = configured_model.get("tier3_backend", "mock")
+    if configured_model.get("use_mock_models", True):
+        backend_options = ["mock"]
+    else:
+        backend_options = [configured_backend, "mock"]
+    backend = st.selectbox("Reasoning model", list(dict.fromkeys(backend_options)))
     run_btn = st.button("Run Analysis", disabled=uploaded is None)
 
 if "result" not in st.session_state:
@@ -77,12 +94,11 @@ if run_btn and uploaded:
             tmp.write(uploaded.read())
             dicom_path = tmp.name
 
-        pipeline_config = load_yaml(CONFIG_DIR / "pipeline_config.yaml")
+        pipeline_config = _configured_pipeline()
         vocab = load_yaml(CONFIG_DIR / "pathology_vocab.yaml")
         phi = load_yaml(CONFIG_DIR / "phi_tags.yaml")
         pipeline_config["model"]["tier3_backend"] = backend
-        if backend == "mock":
-            pipeline_config["model"]["use_mock_models"] = True
+        pipeline_config["model"]["use_mock_models"] = backend == "mock"
 
         merged_config = {
             **pipeline_config,

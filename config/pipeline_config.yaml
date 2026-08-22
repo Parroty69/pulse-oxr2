@@ -1,8 +1,13 @@
 model:
   device: cpu
   tier3_backend: mock
+  tier3_runtime: mock
+  tier3_quantization: none
+  compute_dtype: fp32
+  screening_dtype: fp32
   medsam_checkpoint_path: medsam_vit_b.pth
   use_mock_models: true
+  release_between_tiers: true
 pipeline:
   score_threshold: 0.5
   tile_size: 1024

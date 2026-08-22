@@ -25,12 +25,33 @@ class BiomedCLIPScreener:
         self.model = None
         self.preprocess = None
         self.tokenizer = None
-        self.dtype = dtype if dtype is not None else (torch.float16 if torch is not None else None)
+        self.dtype = self._resolve_dtype(dtype, device)
 
         if not use_mock and torch is not None and create_model_from_pretrained is not None:
             self.model, self.preprocess = create_model_from_pretrained(self.MODEL_ID)
             self.model = self.model.to(device, dtype=self.dtype).eval()
             self.tokenizer = get_tokenizer(self.MODEL_ID)
+
+    @staticmethod
+    def _resolve_dtype(dtype: Any, device: str):
+        if torch is None:
+            return None
+        if dtype is None:
+            return torch.float32 if device == "cpu" else torch.float16
+        if isinstance(dtype, str):
+            normalized = dtype.lower().replace("torch.", "")
+            mapping = {
+                "float32": torch.float32,
+                "fp32": torch.float32,
+                "float16": torch.float16,
+                "fp16": torch.float16,
+                "bfloat16": torch.bfloat16,
+                "bf16": torch.bfloat16,
+            }
+            if normalized not in mapping:
+                raise ValueError(f"Unsupported BiomedCLIP dtype: {dtype}")
+            return mapping[normalized]
+        return dtype
 
     def _prepare_image(self, tile: Any):
         if isinstance(tile, dict):
