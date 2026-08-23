@@ -2,13 +2,11 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shlex
 import subprocess
 import sys
-import urllib.request
 from pathlib import Path
 
 
@@ -25,10 +23,6 @@ from src.deployment.hardware import (  # noqa: E402
     pytorch_index_url,
     select_deployment_plan,
 )
-
-
-MEDSAM_URL = "https://zenodo.org/records/10689643/files/medsam_vit_b.pth?download=1"
-MEDSAM_MD5 = "3bb6db55bd0c9ca30b61248bca72f8d6"
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -131,47 +125,16 @@ def _install_environment(
     return venv_python
 
 
-def _file_md5(path: Path) -> str:
-    digest = hashlib.md5(usedforsecurity=False)
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _download_medsam(destination: Path, dry_run: bool) -> None:
-    if destination.is_file() and _file_md5(destination) == MEDSAM_MD5:
-        print(f"  MedSAM checkpoint already verified: {destination}")
-        return
-    print(f"  Download MedSAM checkpoint -> {destination}")
-    if dry_run:
-        return
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    partial = destination.with_suffix(destination.suffix + ".part")
-    request = urllib.request.Request(MEDSAM_URL, headers={"User-Agent": "cxr-copilot-deployer/1.0"})
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response, partial.open("wb") as output:
-            while chunk := response.read(1024 * 1024):
-                output.write(chunk)
-    except Exception:
-        partial.unlink(missing_ok=True)
-        raise
-    checksum = _file_md5(partial)
-    if checksum != MEDSAM_MD5:
-        partial.unlink(missing_ok=True)
-        raise RuntimeError(f"MedSAM checksum mismatch: expected {MEDSAM_MD5}, received {checksum}")
-    partial.replace(destination)
-
-
 def _prefetch_models(venv_python: Path, plan: DeploymentPlan, dry_run: bool) -> None:
     if plan.use_mock_models:
         print("  Mock deployment selected; no checkpoints are required.")
         return
     checkpoint = ROOT / "checkpoints/medsam/medsam_vit_b.pth"
-    _download_medsam(checkpoint, dry_run)
     command = [
         str(venv_python),
         str(ROOT / "scripts/prefetch_models.py"),
+        "--medsam-checkpoint",
+        str(checkpoint),
         "--tier3-model",
         plan.model_id,
     ]

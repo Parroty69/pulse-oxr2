@@ -137,6 +137,21 @@ def test_apple_chexagent_falls_back_to_transformers_mps():
     assert plan.quantization == "none"
 
 
+def test_apple_chexagent_avoids_low_bit_transformers_when_memory_is_tight():
+    profile = _profile("mps", 8, total=24, os_name="darwin", unified=True)
+    plan = select_deployment_plan(profile, backend="chexagent")
+
+    assert plan.quantization == "none"
+    assert any("Low-bit Transformers" in warning for warning in plan.warnings)
+
+
+def test_explicit_low_bit_transformers_is_rejected_on_apple_mps():
+    profile = _profile("mps", 8, total=24, os_name="darwin", unified=True)
+
+    with pytest.raises(ValueError, match="not enabled on Apple MPS"):
+        select_deployment_plan(profile, backend="chexagent", quantization="int8")
+
+
 def test_explicit_mlx_rejects_chexagent_custom_architecture():
     profile = _profile("mps", 14, total=24, os_name="darwin", unified=True)
     with pytest.raises(ValueError, match="CheXagent"):

@@ -627,13 +627,30 @@ def select_deployment_plan(
 
     policy_warnings: list[str] = []
     if quantization == "auto":
-        selected_quantization = (
-            _auto_mlx_quantization(profile)
-            if framework == "mlx-vlm"
-            else _auto_transformers_quantization(profile, backend)
-        )
+        if framework == "mlx-vlm":
+            selected_quantization = _auto_mlx_quantization(profile)
+        elif profile.accelerator == "mps":
+            selected_quantization = "none"
+            memory = profile.available_memory_gib or profile.total_memory_gib
+            full_precision_floor = 13.0 if backend == "medgemma" else 10.0
+            if memory < full_precision_floor:
+                policy_warnings.append(
+                    "Low-bit Transformers loading is not enabled on Apple MPS; the model will use FP16. "
+                    "Free unified memory or select MedGemma with MLX-VLM if it does not fit."
+                )
+        else:
+            selected_quantization = _auto_transformers_quantization(profile, backend)
     else:
         selected_quantization = _normalize_quantization(quantization, framework)
+        if (
+            framework == "transformers"
+            and profile.accelerator == "mps"
+            and selected_quantization != "none"
+        ):
+            raise ValueError(
+                "Low-bit Transformers quantization is not enabled on Apple MPS; "
+                "use --quantization none or select MedGemma with MLX-VLM"
+            )
 
     capability = _cuda_compute_capability(profile)
     if framework == "transformers" and profile.accelerator == "cuda" and capability:
