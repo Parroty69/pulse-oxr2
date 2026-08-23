@@ -181,6 +181,7 @@ async def run_pipeline(dicom_path: str, config: dict) -> dict:
         warnings.append("No grounded regions generated at current threshold.")
 
     return {
+        "display_image": image_rgb,
         "masks": masks,
         "report": verified_report,
         "tile_scores": tile_scores,
