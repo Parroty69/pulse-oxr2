@@ -13,13 +13,13 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import numpy as np
 import streamlit as st
-from PIL import Image, ImageDraw
 
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
+from src.ingestion.dicom_loader import load_dicom, to_rgb
 from src.orchestration.pipeline import deep_merge, load_yaml, run_pipeline
+from src.ui.dicom_viewer import render_overlay
 
 
 CONFIG_DIR = ROOT / "config"
@@ -34,20 +34,21 @@ def _configured_pipeline() -> dict:
     return config
 
 
-def _render_overlay(result: dict, enabled_indices: set[int]) -> Image.Image:
-    base = np.array(result.get("display_image"))
-    if base.ndim == 2:
-        base = np.stack([base, base, base], axis=-1)
-    image = Image.fromarray(base.astype(np.uint8))
-    draw = ImageDraw.Draw(image)
-    for idx, mask_obj in enumerate(result.get("masks", [])):
-        if idx not in enabled_indices:
-            continue
-        poly = mask_obj.get("polygon", [])
-        if len(poly) >= 2:
-            pts = [tuple(map(int, p)) for p in poly]
-            draw.polygon(pts, outline="red")
-    return image
+def _decode_uploaded_preview(uploaded_bytes: bytes):
+    """Decode a preview independently of the pipeline result contract.
+
+    Keeping this fallback in the Streamlit entrypoint also covers a running
+    server that hot-reloaded the UI while retaining an older imported pipeline
+    module in memory.
+    """
+
+    with NamedTemporaryFile(suffix=".dcm", delete=False) as tmp:
+        tmp.write(uploaded_bytes)
+        dicom_path = tmp.name
+    try:
+        return to_rgb(load_dicom(dicom_path, phi_tags=[]).image_np)
+    finally:
+        Path(dicom_path).unlink(missing_ok=True)
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -95,7 +96,7 @@ if "result" not in st.session_state:
 if run_btn and uploaded:
     with st.spinner("Running Tier 1 → Tier 2 → Tier 3 pipeline..."):
         with NamedTemporaryFile(suffix=".dcm", delete=False) as tmp:
-            tmp.write(uploaded.read())
+            tmp.write(uploaded.getvalue())
             dicom_path = tmp.name
 
         pipeline_config = _configured_pipeline()
@@ -110,13 +111,12 @@ if run_btn and uploaded:
             "phi_tags": phi.get("phi_tags", []),
         }
 
-        result = asyncio.run(run_pipeline(dicom_path, merged_config))
-        if result.get("masks") and result["masks"][0].get("mask") is not None:
-            shape = result["masks"][0]["mask"].shape
-            display = np.zeros((shape[0], shape[1], 3), dtype=np.uint8)
-        else:
-            display = np.zeros((512, 512, 3), dtype=np.uint8)
-        result["display_image"] = display
+        try:
+            result = asyncio.run(run_pipeline(dicom_path, merged_config))
+            if result.get("display_image") is None:
+                result["display_image"] = _decode_uploaded_preview(uploaded.getvalue())
+        finally:
+            Path(dicom_path).unlink(missing_ok=True)
         st.session_state.result = result
 
 with col_viewer:
@@ -125,19 +125,30 @@ with col_viewer:
     show_masks = st.toggle("Show MedSAM overlay", value=True)
 
     if result:
-        st.caption("Per-finding overlay toggles")
-        enabled = set()
-        for idx, mask_obj in enumerate(result.get("masks", [])):
-            label = mask_obj.get("label") or f"Region {idx + 1}"
-            is_on = st.checkbox(f"{label} ({idx})", value=True, key=f"mask_{idx}")
-            if is_on:
-                enabled.add(idx)
+        preview_recovery_error = None
+        if result.get("display_image") is None and uploaded is not None:
+            try:
+                result["display_image"] = _decode_uploaded_preview(uploaded.getvalue())
+            except Exception as exc:  # pragma: no cover - surfaced in the UI
+                preview_recovery_error = exc
 
-        if show_masks:
-            overlay = _render_overlay(result, enabled)
-            st.image(overlay, use_container_width=True)
+        if preview_recovery_error is not None:
+            st.error(f"DICOM preview recovery failed: {preview_recovery_error}")
         else:
-            st.image(result.get("display_image"), use_container_width=True)
+            st.caption("Per-finding overlay toggles")
+            enabled = set()
+            for idx, mask_obj in enumerate(result.get("masks", [])):
+                label = mask_obj.get("label") or f"Region {idx + 1}"
+                is_on = st.checkbox(f"{label} ({idx})", value=True, key=f"mask_{idx}")
+                if is_on:
+                    enabled.add(idx)
+
+            try:
+                preview = render_overlay(result, enabled if show_masks else set())
+            except (TypeError, ValueError) as exc:
+                st.error(f"DICOM preview unavailable: {exc}. Please run the analysis again.")
+            else:
+                st.image(preview, use_container_width=True)
     else:
         st.info("Upload a DICOM and run analysis to view overlays.")
 

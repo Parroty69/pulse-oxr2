@@ -61,7 +61,10 @@ async def test_pipeline_result_payload_shape(tmp_path: Path):
 
     result = await run_pipeline(str(dicom_path), config)
 
-    assert set(result.keys()) == {"masks", "report", "tile_scores", "warnings"}
+    assert set(result.keys()) == {"display_image", "masks", "report", "tile_scores", "warnings"}
+    assert result["display_image"].shape == (512, 512, 3)
+    assert result["display_image"].dtype == np.uint8
+    assert result["display_image"].max() > 0
     assert isinstance(result["masks"], list)
     assert isinstance(result["tile_scores"], list)
     assert isinstance(result["warnings"], list)
