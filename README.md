@@ -2,10 +2,18 @@
 
 ⚠️ **AI-Assisted Draft — Requires Physician Review.**
 
-This repository implements a research-grade, multi-agent chest X-ray co-pilot pipeline:
+This repository implements a research-grade, multi-stage chest X-ray co-pilot pipeline:
 - Tier 1: BiomedCLIP open-vocabulary screening
-- Tier 2: MedSAM spatial grounding masks
+- Tier 2: MedSAM experimental candidate-region masks
 - Tier 3: CheXagent-2-3b or MedGemma-4B draft report generation
+
+The Streamlit interface supports English and Vietnamese labels, clears stale
+results when a different DICOM is selected, displays input/runtime warnings,
+and distinguishes positive claims linked to candidate regions from text-only
+positive claims, negative statements, and non-localizable statements. Candidate
+regions are model proposals, not validated lesion boundaries.
+BiomedCLIP scores are relative to the configured prompt set and must not be
+interpreted as calibrated disease probabilities.
 
 ## Clinical and regulatory disclaimers
 - This is a **clinical decision-support co-pilot**, not an autonomous diagnostic system.
@@ -114,6 +122,20 @@ archive, preprocessing, or inference smoke tests is not evidence of clinical
 accuracy.
 
 UI footer also includes the non-diagnostic disclaimer.
+
+## Deadline preflight and competition demo
+
+Run the offline software-readiness check before a demonstration. It validates the
+environment, selected hardware plan, checkpoint presence, optional DICOM decode,
+and complete automated test suite; it does not claim clinical validation.
+
+```bash
+./scripts/preflight.py --dicom /path/to/de-identified-demo.dcm
+```
+
+The submission-ready title, description, timed English narration, Vietnamese
+subtitle track, recording checklist, and claim limitations are in
+[`docs/competition/DEADLINE_PACKAGE.md`](docs/competition/DEADLINE_PACKAGE.md).
 
 ## Tests
 
