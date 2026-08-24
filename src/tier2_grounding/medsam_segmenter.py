@@ -24,9 +24,11 @@ class MedSAMSegmenter:
         self.device = device
         self.use_mock = use_mock
         self.predictor = None
-        if not use_mock and sam_model_registry is not None and SamPredictor is not None:
+        if not use_mock:
             if torch is None:
                 raise RuntimeError("PyTorch is required to load MedSAM")
+            if sam_model_registry is None or SamPredictor is None:
+                raise RuntimeError("segment-anything is required to load MedSAM")
             model = sam_model_registry["vit_b"]()
             state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
             model.load_state_dict(state_dict)
