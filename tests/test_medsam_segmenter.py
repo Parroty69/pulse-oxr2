@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from src.tier2_grounding import medsam_segmenter
 
 
@@ -19,6 +21,13 @@ class _FakeModel:
     def eval(self):
         self.evaluating = True
         return self
+
+
+def test_real_mode_fails_closed_when_segment_anything_is_unavailable(monkeypatch) -> None:
+    monkeypatch.setattr(medsam_segmenter, "sam_model_registry", None)
+
+    with pytest.raises(RuntimeError, match="segment-anything"):
+        medsam_segmenter.MedSAMSegmenter("checkpoint.pth", device="cpu")
 
 
 def test_checkpoint_is_safely_loaded_on_cpu_before_model_moves_to_accelerator(monkeypatch) -> None:

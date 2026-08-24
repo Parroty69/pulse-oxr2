@@ -183,7 +183,7 @@ class ReportGenerator:
             [
                 "Tier 1 candidate findings:",
                 *(score_lines or ["- none"]),
-                "Tier 2 grounded masks:",
+                "Tier 2 experimental candidate regions:",
                 *(mask_lines or ["- none"]),
             ]
         )
@@ -215,8 +215,12 @@ class ReportGenerator:
         grounding = self._build_context(tier1_scores, tier2_masks)
         prompt = (
             "You are an expert radiology assistant drafting a report for physician review only; "
-            "do not produce a final diagnosis. Output sections FINDINGS and IMPRESSION.\n\n"
-            f"Grounding context:\n{grounding}\n"
+            "do not produce a final diagnosis. Output sections FINDINGS and IMPRESSION. "
+            "Candidate regions are model-generated proposals, not ground truth. Only state a positive focal "
+            "finding when a matching candidate region is supplied. Never interpret a missing candidate region "
+            "as proof that the image is normal. Avoid contradictory positive and negative statements. If the "
+            "evidence is insufficient, state that limitation explicitly.\n\n"
+            f"Evidence context:\n{grounding}\n"
         )
 
         image = self._to_pil(global_thumbnail)

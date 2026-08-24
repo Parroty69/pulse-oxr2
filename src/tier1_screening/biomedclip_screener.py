@@ -28,7 +28,11 @@ class BiomedCLIPScreener:
         self.tokenizer = None
         self.dtype = self._resolve_dtype(dtype, device)
 
-        if not use_mock and torch is not None and create_model_from_pretrained is not None:
+        if not use_mock:
+            if torch is None:
+                raise RuntimeError("PyTorch is required to load BiomedCLIP")
+            if create_model_from_pretrained is None or get_tokenizer is None:
+                raise RuntimeError("open_clip_torch is required to load BiomedCLIP")
             self.model, self.preprocess = create_model_from_pretrained(self.MODEL_ID)
             self.model = self.model.to(device, dtype=self.dtype).eval()
             self.tokenizer = get_tokenizer(self.MODEL_ID)
@@ -96,6 +100,14 @@ class BiomedCLIPScreener:
             return list(tile.full_image_bbox)
         return [0, 0, 0, 0]
 
+    @staticmethod
+    def _tile_index(tile: Any, fallback: int) -> int:
+        if isinstance(tile, dict) and "tile_index" in tile:
+            return int(tile["tile_index"])
+        if hasattr(tile, "tile_index"):
+            return int(tile.tile_index)
+        return fallback
+
     def _mock_scores(self, tiles: list[Any], vocab_prompts: list[str]) -> list[dict]:
         outputs: list[dict] = []
         for idx, tile in enumerate(tiles):
@@ -112,10 +124,11 @@ class BiomedCLIPScreener:
             exp = np.exp(logits_np - logits_np.max())
             probs = exp / max(exp.sum(), 1e-8)
             bbox = self._tile_bbox(tile)
+            tile_index = self._tile_index(tile, idx)
             for label, score in zip(vocab_prompts, probs.tolist()):
                 outputs.append(
                     {
-                        "tile_index": idx,
+                        "tile_index": tile_index,
                         "label": label,
                         "score": float(score),
                         "full_image_bbox": bbox,
@@ -142,14 +155,21 @@ class BiomedCLIPScreener:
             image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
             logits = image_features @ text_features.T
+            logit_scale = getattr(self.model, "logit_scale", None)
+            if logit_scale is not None:
+                # OpenCLIP stores this value in log space. Omitting it collapses
+                # zero-shot probabilities around 1 / number_of_prompts and makes
+                # a configured threshold such as 0.5 unreachable in practice.
+                logits = logits * logit_scale.exp().clamp(max=100.0)
             probs = torch.softmax(logits, dim=1).detach().cpu().numpy()
 
             for idx, row in enumerate(probs):
                 bbox = self._tile_bbox(tiles[idx])
+                tile_index = self._tile_index(tiles[idx], idx)
                 for label, score in zip(vocab_prompts, row.tolist()):
                     outputs.append(
                         {
-                            "tile_index": idx,
+                            "tile_index": tile_index,
                             "label": label,
                             "score": float(score),
                             "full_image_bbox": bbox,

@@ -8,7 +8,7 @@ import pytest
 from pydicom.dataset import FileDataset, FileMetaDataset
 from pydicom.uid import ExplicitVRLittleEndian, generate_uid
 
-from src.orchestration.pipeline import run_pipeline
+from src.orchestration.pipeline import run_pipeline, tier1_scores_to_medsam_boxes
 
 
 def _create_synthetic_dicom(path: Path) -> None:
@@ -61,7 +61,15 @@ async def test_pipeline_result_payload_shape(tmp_path: Path):
 
     result = await run_pipeline(str(dicom_path), config)
 
-    assert set(result.keys()) == {"display_image", "masks", "report", "tile_scores", "warnings"}
+    assert set(result.keys()) == {
+        "display_image",
+        "masks",
+        "report",
+        "tile_scores",
+        "warnings",
+        "runtime_metrics",
+        "model_manifest",
+    }
     assert result["display_image"].shape == (512, 512, 3)
     assert result["display_image"].dtype == np.uint8
     assert result["display_image"].max() > 0
@@ -72,3 +80,35 @@ async def test_pipeline_result_payload_shape(tmp_path: Path):
     assert "findings" in result["report"]
     assert "impression" in result["report"]
     assert "findings_annotations" in result["report"]
+    assert result["runtime_metrics"]["total_ms"] >= 0
+    assert result["model_manifest"]["mock_models"] is True
+
+
+def test_normal_scores_never_become_medsam_prompts_and_region_count_is_bounded() -> None:
+    scores = [
+        {
+            "label": "a normal chest x-ray",
+            "score": 0.99,
+            "full_image_bbox": [0, 0, 100, 100],
+        },
+        {
+            "label": "a chest x-ray showing a pulmonary nodule or mass",
+            "score": 0.90,
+            "full_image_bbox": [0, 0, 100, 100],
+        },
+        {
+            "label": "a chest x-ray showing a pulmonary nodule or mass",
+            "score": 0.80,
+            "full_image_bbox": [120, 0, 220, 100],
+        },
+        {
+            "label": "a chest x-ray showing a pulmonary nodule or mass",
+            "score": 0.70,
+            "full_image_bbox": [240, 0, 340, 100],
+        },
+    ]
+
+    prompts = tier1_scores_to_medsam_boxes(scores, threshold=0.5, max_regions_per_label=2)
+
+    assert len(prompts) == 2
+    assert all("normal" not in prompt["label"] for prompt in prompts)
