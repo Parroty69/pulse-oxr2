@@ -123,7 +123,11 @@ accuracy.
 
 UI footer also includes the non-diagnostic disclaimer.
 
-## Deadline preflight and competition demo
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE).
+
+## Software readiness preflight
 
 Run the offline software-readiness check before a demonstration. It validates the
 environment, selected hardware plan, checkpoint presence, optional DICOM decode,
@@ -132,10 +136,6 @@ and complete automated test suite; it does not claim clinical validation.
 ```bash
 ./scripts/preflight.py --dicom /path/to/de-identified-demo.dcm
 ```
-
-The submission-ready title, description, timed English narration, Vietnamese
-subtitle track, recording checklist, and claim limitations are in
-[`docs/competition/DEADLINE_PACKAGE.md`](docs/competition/DEADLINE_PACKAGE.md).
 
 ## Tests
 
