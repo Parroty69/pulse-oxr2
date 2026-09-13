@@ -144,7 +144,7 @@ def main() -> int:
     else:
         record("WARN", "Automated tests", "Skipped by request")
 
-    print("\nPulse-OXR deadline preflight")
+    print("\nPulse-OXR software readiness preflight")
     print("Software readiness only - not clinical validation or diagnostic-performance evidence.\n")
     for status, check, detail in results:
         print(f"[{status:4}] {check}: {detail}")
